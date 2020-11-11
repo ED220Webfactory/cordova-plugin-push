@@ -123,7 +123,7 @@
       <config>
         <source url="https://cdn.cocoapods.org/"/>
       </config>
-      <pods use-frameworks="true">
+      <pods>
         <pod name="Firebase/Messaging" spec="~> 6.32.2" />
       </pods>
     </podspec>
