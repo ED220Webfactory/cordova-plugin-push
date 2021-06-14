@@ -50,6 +50,8 @@
 @synthesize fcmRegistrationToken;
 @synthesize fcmTopics;
 
+@synthesize token;
+
 -(void)initRegistration;
 {
     [[FIRInstanceID instanceID] instanceIDWithHandler:^(FIRInstanceIDResult * _Nullable result, NSError * _Nullable error) {
@@ -173,7 +175,6 @@
             pushRegistry.desiredPushTypes = [NSSet setWithObject:PKPushTypeVoIP];
         }];
     } else {
-        NSLog(@"Push Plugin VoIP missing or false");
         [[NSNotificationCenter defaultCenter]
          addObserver:self selector:@selector(onTokenRefresh)
          name:kFIRInstanceIDTokenRefreshNotification object:nil];
@@ -193,6 +194,11 @@
         [self.commandDelegate runInBackground:^ {
             NSLog(@"Push Plugin register called");
             self.callbackId = command.callbackId;
+            
+            if (self.token != nil) {
+                [self registerWithToken:self.token];
+                return;
+            }
 
             NSArray* topics = [iosOptions objectForKey:@"topics"];
             [self setFcmTopics:topics];
@@ -572,6 +578,7 @@
 
 -(void)registerWithToken:(NSString*)token; {
     // Send result to trigger 'registration' event but keep callback
+    self.token = token;
     NSMutableDictionary* message = [NSMutableDictionary dictionaryWithCapacity:2];
     [message setObject:token forKey:@"registrationId"];
     if ([self usesFCM]) {
@@ -696,7 +703,15 @@
 
 - (void)registerForRemoteNotifications
 {
-    [[UIApplication sharedApplication] registerForRemoteNotifications];
+    
+    if ([[UIApplication sharedApplication] respondsToSelector:@selector(registerUserNotificationSettings:)]) {
+        UIUserNotificationSettings* settings = [UIUserNotificationSettings settingsForTypes:UIUserNotificationTypeAlert | UIUserNotificationTypeBadge | UIUserNotificationTypeSound categories:nil];
+        [[UIApplication sharedApplication] registerUserNotificationSettings:settings];
+    } else {
+        [[UIApplication sharedApplication] registerForRemoteNotifications];
+    }
+     
+    //[[UIApplication sharedApplication] registerForRemoteNotifications];
 }
 
 @end

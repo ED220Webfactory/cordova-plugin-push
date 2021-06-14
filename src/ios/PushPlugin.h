@@ -49,6 +49,8 @@
 @property (nonatomic, copy) NSString *notificationCallbackId;
 @property (nonatomic, copy) NSString *callback;
 
+@property (nonatomic, copy) NSString *token;
+
 @property (nonatomic, strong) NSDictionary *notificationMessage;
 @property BOOL isInline;
 @property BOOL coldstart;

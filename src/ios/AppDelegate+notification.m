@@ -28,29 +28,30 @@ NSString *const pushPluginApplicationDidBecomeActiveNotification = @"pushPluginA
 {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        Class class = [self class];
-
-        SEL originalSelector = @selector(init);
-        SEL swizzledSelector = @selector(pushPluginSwizzledInit);
-
-        Method original = class_getInstanceMethod(class, originalSelector);
-        Method swizzled = class_getInstanceMethod(class, swizzledSelector);
-
-        BOOL didAddMethod =
-        class_addMethod(class,
-                        originalSelector,
-                        method_getImplementation(swizzled),
-                        method_getTypeEncoding(swizzled));
-
-        if (didAddMethod) {
-            class_replaceMethod(class,
-                                swizzledSelector,
-                                method_getImplementation(original),
-                                method_getTypeEncoding(original));
-        } else {
-            method_exchangeImplementations(original, swizzled);
-        }
+        [AppDelegate pushPluginSwizzleSel:self orig:@selector(init) swizzle:@selector(pushPluginSwizzledInit)];
+        [AppDelegate pushPluginSwizzleSel:self orig:@selector(application:didRegisterForRemoteNotificationsWithDeviceToken:) swizzle:@selector(application:pushPluginDidRegisterForRemoteNotificationsWithDeviceToken:)];
+        [AppDelegate pushPluginSwizzleSel:self orig:@selector(application:didFailToRegisterForRemoteNotificationsWithError:) swizzle:@selector(application:pushPluginDidFailToRegisterForRemoteNotificationsWithError:)];
     });
+}
+
++ (void)pushPluginSwizzleSel:(Class)class orig:(SEL)origSel swizzle:(SEL)swizzleSel {
+    Method original = class_getInstanceMethod(class, origSel);
+    Method swizzled = class_getInstanceMethod(class, swizzleSel);
+
+    BOOL didAddMethod =
+    class_addMethod(class,
+                    origSel,
+                    method_getImplementation(swizzled),
+                    method_getTypeEncoding(swizzled));
+
+    if (didAddMethod) {
+        class_replaceMethod(class,
+                            swizzleSel,
+                            method_getImplementation(original),
+                            method_getTypeEncoding(original));
+    } else {
+        method_exchangeImplementations(original, swizzled);
+    }
 }
 
 - (AppDelegate *)pushPluginSwizzledInit
@@ -62,20 +63,41 @@ NSString *const pushPluginApplicationDidBecomeActiveNotification = @"pushPluginA
                                             selector:@selector(pushPluginOnApplicationDidBecomeActive:)
                                                 name:UIApplicationDidBecomeActiveNotification
                                               object:nil];
+    [[UNUserNotificationCenter currentNotificationCenter] requestAuthorizationWithOptions:UNAuthorizationOptionAlert | UNAuthorizationOptionBadge | UNAuthorizationOptionSound completionHandler:^(BOOL granted, NSError * _Nullable error) {
+        NSLog(@"NotificationCenter#requestAuthorizationWithOptions callback. Granted: %i, Error: %@", granted, error);
+        if (granted) {
+            [[UIApplication sharedApplication] registerForRemoteNotifications];
+        }
+    }];
 
     // This actually calls the original init method over in AppDelegate. Equivilent to calling super
     // on an overrided method, this is not recursive, although it appears that way. neat huh?
     return [self pushPluginSwizzledInit];
 }
 
+- (void)application:(UIApplication *)application didRegisterUserNotificationSettings:(nonnull UIUserNotificationSettings *)notificationSettings {
+    [application registerForRemoteNotifications];
+}
+
 - (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken {
-    PushPlugin *pushHandler = [self getCommandInstance:@"PushNotification"];
-    [pushHandler didRegisterForRemoteNotificationsWithDeviceToken:deviceToken];
+    //NOP
 }
 
 - (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
+    //NOP
+}
+
+- (void)application:(UIApplication *)application pushPluginDidRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken {
+    PushPlugin *pushHandler = [self getCommandInstance:@"PushNotification"];
+    [pushHandler didRegisterForRemoteNotificationsWithDeviceToken:deviceToken];
+    [self application:application pushPluginDidRegisterForRemoteNotificationsWithDeviceToken:deviceToken];
+    [application unregisterForRemoteNotifications];
+}
+
+- (void)application:(UIApplication *)application pushPluginDidFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
     PushPlugin *pushHandler = [self getCommandInstance:@"PushNotification"];
     [pushHandler didFailToRegisterForRemoteNotificationsWithError:error];
+    [self application:application pushPluginDidFailToRegisterForRemoteNotificationsWithError:error];
 }
 
 - (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
